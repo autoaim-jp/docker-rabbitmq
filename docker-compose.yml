@@ -1,0 +1,56 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3.11.7-management
+    ports:
+      - 5672:5672
+      - 15672:15672
+    environment:
+      - RABBITMQ_DEFAULT_USER=root
+      - RABBITMQ_DEFAULT_PASS=password
+    volumes:
+      - ./service/rabbitmq/data:/var/lib/rabbitmq
+    healthcheck:
+      test: rabbitmq-diagnostics check_port_connectivity
+      interval: 30s
+      timeout: 30s
+      retries: 10
+
+  add_queue:
+    build:
+      context: ./
+      dockerfile: ./service/addQueue/docker/Dockerfile
+    tty: true
+    working_dir: /app
+    volumes:
+      - ./service/addQueue/src:/app
+    command: sh -c "python producer.py"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  calculate:
+   build:
+     context: ./
+     dockerfile: ./service/calculate/docker/Dockerfile
+   tty: true
+   working_dir: /app
+   volumes:
+     - ./service/calculate/src:/app
+   command: sh -c "python consumer.py"
+   depends_on:
+     add_queue:
+       condition: service_completed_successfully
+
+  nodejs:
+   build:
+     context: ./
+     dockerfile: ./service/nodejs/docker/Dockerfile
+   tty: true
+   working_dir: /app
+   volumes:
+     - ./service/nodejs/src:/app
+   command: sh -c "node listenAndSend.js"
+   depends_on:
+     add_queue:
+       condition: service_completed_successfully
+
